@@ -1,0 +1,159 @@
+
+body {
+    font-size: 14px;
+}
+
+p {
+    margin: 0;
+}
+
+h3 {
+    margin: 0;
+}
+
+.caret {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    margin-left: 2px;
+    vertical-align: middle;
+    border-top: 4px dashed;
+    border-top: 4px solid\9;
+    border-right: 4px solid transparent;
+    border-left: 4px solid transparent;
+}
+
+.btn {
+  padding: .5rem .75rem;
+}
+
+.badge {
+    cursor: pointer;
+}
+
+.badge-default {
+    background-color: #636c72;
+}
+.badge-primary {
+    background-color: #0275d8;
+}
+.badge-success {
+    background-color: #5cb85c;
+}
+.badge-info {
+    background-color: #5bc0de;
+}
+.badge-warning {
+    background-color: #f0ad4e;
+}
+.badge-danger {
+    background-color: #d9534f;
+}
+
+.listContainer {
+    margin: auto;
+    max-width: 400px;
+    border: 1px solid #848484;
+}
+
+    .containerSegment {
+        border-bottom: 1px solid #AAAAAA;
+        padding: 2px;
+    }
+        .containerSegment:last-child {
+            border-bottom: 0;
+    }
+
+    .hiddenFirst {
+        display: none;
+    }
+
+    .listEvents {
+        padding: 0;
+        border-bottom: 0;
+    }
+
+        .list-group-item.day {
+            padding: 2px 7px 2px 2px;
+            background-color: #eee;
+            /*border-bottom: 1px solid #AAAAAA;*/
+            /*font-weight: bold;*/
+        }
+
+        .event {
+            padding: 2px 7px;
+            /*border-bottom: 1px solid #CCCCCC;*/
+            /*color: #000;*/
+        }
+            .event:hover {
+                background-color: #f5f5f5;
+            }
+            .event.list-group-item.list-group-item-danger:hover {
+                background-color: #ebcccc;
+            }
+
+            .event .desc {
+                padding-left: 5px;
+            }
+
+
+body {
+    background-color: #F5F5F5;
+}
+
+.wrapper {
+    background-color: #fff;
+}
+
+.event > div {
+    max-width: 85%;
+}
+
+.day {
+    padding-top: 10px;
+}
+
+time {
+    margin: 4px;
+    padding-right: 4px;
+}
+time.hidden-xs-down {
+    padding-right: 12px;
+    float: right;
+}
+
+.timeline {
+    width: 7px;
+    height: calc(100% + 10px);
+    background-color: #00f;
+    position: absolute;
+    top: -10px;
+    right: 10px;
+}
+
+.day:nth-child(2) .timeline {
+    z-index: 1000;
+    height: calc(100% - 10px);
+    top: 10px;
+}
+.day:nth-child(2) .timeline::before {
+    top: -6px
+}
+
+.day:last-child .timeline {
+    height: 20px;
+}
+
+.timeline::before {
+    content: '' attr(data-before);
+    position: absolute;
+    left: 50%;
+    top: 14px;
+    transform: translateX(-50%);
+    width: 25px;
+    height: 25px;
+    background-color: #0cf;
+    border-radius: 50%;
+    text-align: center;
+    padding-top: 2px;
+}

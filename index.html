@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+  <title>School Events</title>
+
+  <link rel="icon" href="icon.ico" />
+
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-alpha.6/css/bootstrap.min.css" integrity="sha384-rwoIResjU2yc3z8GV/NPeZWAv56rSmLldC3R/AZzGRnGxQQKnKkoFVhFQhNUwEyJ" crossorigin="anonymous">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+
+  <!--jQuery-->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+
+  <!--jQuery UI-->
+  <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/themes/smoothness/jquery-ui.css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+
+  <script src="./config.js"></script>
+  <script type="text/javascript">
+    var CAL_ID;
+
+    var MSINDAY = 86400000;
+    var MSINWEEK = MSINDAY * 7;
+    var TODAY = new Date();
+
+    /**
+     * Check if current user has authorized this application.
+     */
+    function checkAuth() {
+      gapi.auth.authorize(
+        {
+          'client_id': CLIENT_ID,
+          'scope': SCOPES,
+          'immediate': true
+        },
+        handleAuthResult
+      );
+    }
+
+    /**
+     * Handle response from authorization server.
+     *
+     *@param {Object} authResult Authorization Result.
+     */
+    function handleAuthResult(authResult) {
+      var authorizeDiv = document.getElementById('authorize-div');
+      if (authResult && !authResult.error) {
+        //Hide auth UI, then load client library.
+        authorizeDiv.style.display = 'none';
+        loadCalendarApi();
+      }
+      else {
+        // Show auth UI, allowing the user to initiate authorization by clicking authorize button.
+        authorizeDiv.style.display = 'inline';
+      }
+    }
+
+    /**
+     * Initiate auth flow in response to user clicking authorize button.
+     *
+     * @param {Event} event Button click event.
+     */
+    function handleAuthClick(event) {
+      gapi.auth.authorize(
+        { client_id: CLIENT_ID, scope: SCOPES, immediate: false },
+        handleAuthResult
+      );
+      return false;
+    }
+
+    /**
+     * Load Google Calendar client library. List upcoming events once client library is loaded.
+     */
+    function loadCalendarApi() {
+      $('#loadmsg').slideDown();
+      gapi.client.load('calendar', 'v3', getCalendarList);
+    }
+
+    /**
+     *
+     */
+    function getCalendarList() {
+
+      $("#loadButton").text("ReLoad");
+
+      var request = gapi.client.calendar.calendarList.list({ 'minAccessRole': 'owner' });
+
+      request.execute(function (resp) {
+        var cals = resp.items;
+        if (cals.length > 0) {
+          var found = false;
+          for (var i = 0; i < cals.length; i++) {
+            var cal = cals[i];
+            if (cal.summary === "Class Work") {
+              CAL_ID = cal.id;
+              listUpcomingEvents(cal.id);
+              found = true;
+            }
+          }
+          if (!found) {
+            addDay('Class Work calendar not found, using Primary');
+            CAL_ID = "primary";
+            for (var i = 0; i < cals.length; i++) {
+              var cal = cals[i];
+              if (cal.primary) {
+                CAL_ID = cal.id;
+                listUpcomingEvents(cal.id);
+              }
+            }
+          }
+        }
+        else {
+          //No calendars Found
+          addDay('No Calendars Found');
+        }
+        $('#loadmsg').slideUp();
+      });
+    }
+
+    function getEventsByDate(calEvents) {
+      let eventsByDate = {};
+        calEvents.map((event) => {
+          let thisDate = new Date(event.start.dateTime || event.start.date);
+          zeroDateTime(thisDate);
+          // console.log(thisDate.toJSON());
+          let key = thisDate.toJSON();
+
+          if (!eventsByDate[key]) {
+            eventsByDate[key] = [];
+          }
+          eventsByDate[thisDate.toJSON()].push(event);
+        });
+
+        return eventsByDate;
+    }
+
+    /**
+     * Print the summary and start datetime/date of the next events in
+     * the authorized user's calendar. If no events are found an
+     * appropriate message is printed.
+     */
+    function listUpcomingEvents(calendarId) {
+      var request = gapi.client.calendar.events.list({
+        'calendarId': calendarId,
+        'timeMin': (new Date()).toISOString(),
+        'showDeleted': false,
+        'singleEvents': true,
+        'orderBy': 'startTime'
+      });
+
+      request.execute(function (resp) {
+        // console.log("listEvents resp:", resp);
+        var events = resp.items;
+
+        $("#calenderName").html(resp.summary);
+
+        let eventsByDate = getEventsByDate(events);
+        let html = "";
+        for (date in eventsByDate) {
+          let dateTime = new Date(date);
+          // time part
+          html += `<div class="row day">`;
+          html += `<div class="col-2 col-sm-3">`;
+          html += `<time class="hidden-xs-down">${formatDateFromNow(dateTime)}</time>`;
+          html += `<div class="timeline" data-before="${daysFrom(TODAY, dateTime)}"></div>`;
+          html += `</div>`
+          // events side
+          html += `<div class="col-10 col-sm-9">`;
+          html += `<time class="hidden-sm-up">${formatDateFromNow(dateTime)}</time>`;
+          html += `<div class="card rounded-0">`;
+          html += `<ul class="list-group list-group-flush">`;
+          // Loop through events for this day
+          eventsByDate[date].forEach((event) => {
+            // console.log("    ", event.summary);
+
+            let thisDescription = event.description;
+
+            //get flags and clean out the description
+            let isComplete = false;
+            let isUrgent = false;
+            ({ set: isComplete, description: thisDescription } = checkFlags(thisDescription, 'complete'));
+            ({ set: isUrgent, description: thisDescription } = checkFlags(thisDescription, 'urgent'));
+
+            //build the badge
+            let badgeType = isComplete ? 'badge-success' : isUrgent ? 'badge-danger' : 'badge-default';
+            let badge = `<span class="badge badge-pill ${badgeType} ${isComplete ? 'uncomplete' : 'complete'}">` +
+              `${isComplete ? 'Un-Finish' : 'Finish'}</span>`;
+
+            //start the list item setting color and id
+            let listItemType = isComplete ? ' list-group-item-success' : isUrgent ? ' list-group-item-danger' : '';
+
+            // //helpers for time and a caret
+            let caret = `<span class="caret"></span>`;
+            let timeSpan = `<span class="time hiddenFirst">${addZero(dateTime.getHours()) + ":" +
+              addZero(dateTime.getMinutes())}</span>`;
+
+            // //build title and description
+            let titlePara = `<p class="eventTitle">${event.summary} ${thisDescription ? caret : ''} ${timeSpan}</p>`;
+            let descPara = thisDescription ? `<p class="desc" style="display:none;">${thisDescription}</p>` : '';
+
+            html += `<li class="event list-group-item p-1 justify-content-between${listItemType}" id="e1" data-eventId="${event.id}">`
+            html += `<div>${titlePara}${descPara}</div>${badge}</li>`;
+          });
+          //Close tags
+          html += `</ul></div></div></div>`;
+        }
+
+        $(".wrapper > .day").remove()
+        $(".wrapper").append(html);
+
+        $(document).trigger("loadedEvents");
+      });
+    }
+
+    /**
+     * Append a day element to the listEvents
+     *
+     * @param {string} txt Text to be placed in day element.
+     */
+    function addDay(txt) {
+      return '<li class="day list-group-item"><p>' + txt + '</p></li>';
+    }
+
+    function checkFlags(desc, flag) {
+      let pattern = new RegExp('\\s*' + flag + '\\s*');
+      return {
+        set: desc && desc.indexOf(flag) !== -1,
+        description: desc ? desc.replace(pattern, "") : ''
+      }
+    }
+
+    /**
+     * Convert to formatted Date
+     *
+     * @param {Date} date Date to be formatted
+     */
+    function formatDate(date) {
+      var mm = date.getMonth() + 1;
+      var dd = date.getDate();
+      var YY = date.getFullYear();
+      return mm + "/" + dd + "/" + YY;
+    }
+
+    /**
+     * Convert to formatted Date compared to today
+     *
+     * @param {Date} date Date to be formatted
+     */
+    function formatDateFromNow(date) {
+      zeroDateTime(TODAY);
+      zeroDateTime(date);
+      var days = daysFrom(TODAY, date);
+
+      if (days === 0) {
+        return "Today";
+      }
+      else if (days === 1) {
+        return "Tomorrow";
+      }
+      else if (days < 7) {
+        //if in this coming week 0-7 days
+        if (date.getDay() === 0) {
+          return "Sunday";
+        }
+        else if (date.getDay() === 1) {
+          return "Monday";
+        }
+        else if (date.getDay() === 2) {
+          return "Tuesday";
+        }
+        else if (date.getDay() === 3) {
+          return "Wednesday";
+        }
+        else if (date.getDay() === 4) {
+          return "Thursday";
+        }
+        else if (date.getDay() === 5) {
+          return "Friday";
+        }
+        else if (date.getDay() === 6) {
+          return "Saturday";
+        }
+      }
+      else if (days < 14) {
+        //if in the next coming week 8-14 days
+        if (date.getDay() === 0) {
+          return "Next Sunday";
+        }
+        else if (date.getDay() === 1) {
+          return "Next Monday";
+        }
+        else if (date.getDay() === 2) {
+          return "Next Tuesday";
+        }
+        else if (date.getDay() === 3) {
+          return "Next Wednesday";
+        }
+        else if (date.getDay() === 4) {
+          return "Next Thursday";
+        }
+        else if (date.getDay() === 5) {
+          return "Next Friday";
+        }
+        else if (date.getDay() === 6) {
+          return "Next Saturday";
+        }
+      }
+      else {
+        return formatDate(date);
+      }
+    }
+
+    /**
+     * Return the number of days from date1 to date2
+     *
+     * @param {Date} date1 The start date (if today will give days from today)
+     * @param {Date} date2 The end date
+     */
+    function daysFrom(date1, date2) {
+      date1 = zeroDateTime(date1);
+      date2 = zeroDateTime(date2);
+      return Math.floor((date2 - date1) / MSINDAY);
+    }
+
+    /**
+     * Convert the given date to the same date with 00 for all time values
+     *
+     * @param {Date} date The date to be zeroed
+     */
+    function zeroDateTime(date) {
+      date.setHours(0);
+      date.setMinutes(0);
+      date.setSeconds(0);
+      date.setMilliseconds(0);
+      //alert(date);
+      return date;
+    }
+
+    /**
+     * Add leading zero to a double digit number if needed
+     *
+     * @param i
+     * @returns {*}
+     */
+    function addZero(i) {
+      if (i < 10) {
+        i = "0" + i;
+      }
+      return i;
+    }
+  </script>
+
+
+
+  <script src="https://apis.google.com/js/client.js?onload=checkAuth"></script>
+</head>
+
+<body class="container">
+  <div class="row h-100">
+    <div class="col-md-8 offset-md-2 wrapper">
+      <div class="card">
+        <div class="listHeader containerSegment card-block">
+          <h3>Upcoming assignments</h3>
+          <p id="calenderName"></p>
+          <button id="loadButton" class="btn btn-secondary" onClick="loadCalendarApi()">Load</button>
+          <div id="authorize-div" style="display: none;">
+            <!--Button for the user to click to initiate auth sequence -->
+            <button id="authorize-button" class="btn btn-warning" onclick="handleAuthClick(event)">Authorize</button>
+          </div>
+          <button id="newEventButton" class="btn btn-secondary">New Event</button>
+          <span id="loadmsg">Loading</span>
+        </div>
+
+        <div id="newEvent" class="containerSegment hiddenFirst">
+          <form>
+            <label>Enter a new Event</label>
+            <div class="form-group form-inline">
+              <label for="inputClass">Assignment:</label>
+              <select id="inputClass" class="form-control" name="inputClass">
+                <option value="">Select a Class</option>
+              </select>
+              <label for="inputAssignment" class="hidden-xs"> - </label>
+              <input type="text" id="inputAssignment" class="form-control" name="inputAssignment" placeholder="Assignment">
+
+            </div>
+            <div class="form-group form-inline">
+              <label for="inputDescription">Description:</label>
+              <input type="text" id="inputDescription" class="form-control" name="inputDescription" placeholder="Description">
+              <div class="form-check">
+                <label>
+                  <input type="checkbox" id="inputUrgent" name="inputUrgent" value="urgent">
+                  Urgent
+                </label>
+              </div>
+            </div>
+            <div class="form-group form-inline">
+              <label for="inputDate">Date:</label>
+              <input type="date" id="inputDate" class="form-control" name="inputDate">
+              <label for="inputTime">Time:</label>
+              <input type="time" id="inputTime" class="form-control" name="inputTime" placeholder="hh:mm" step="1800">
+            </div>
+            <div class="form-group form-inline">
+              <button type="button" class="btn btn-primary" id="submit">Submit</button>
+              <div class="form-check">
+                <label>Preserve</label>
+                <label><input type="checkbox" name="preserve-class" id="preserve-class"> class, </label>
+                <label><input type="checkbox" name="preserve-assignment" id="preserve-assignment"> name, </label>
+                <label><input type="checkbox" name="preserve-time" id="preserve-time"> time</label>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="text/javascript">
+    $("#newEventButton").on("click", function () {
+      $("#newEvent").slideToggle();
+    });
+
+    $("#inputTime").keyup(function (event) {
+      if (event.keyCode === 13) {
+        $("#submit").click();
+      }
+    });
+
+    $("#submit").on("click", function () {
+      createEvent();
+    });
+
+    $.datepicker.setDefaults({
+      showAnim: "slideDown",
+      showButtonPanel: true,
+      autoSize: true,
+      dateFormat: "yy-mm-dd",
+      defaultDate: 0,
+      gotoCurrent: true,
+      minDate: 0,
+      showOtherMonths: true,
+      selectOtherMonths: true
+
+    });
+
+    // $("[name='inputDate']").datepicker();
+
+    // Set default and min date to today
+    let todayString = `${TODAY.getFullYear()}-${('0' + (TODAY.getMonth()+1)).slice(-2)}-${('0' + TODAY.getDate()).slice(-2)}`
+    $('#inputDate').val(todayString);
+    $('#inputDate').attr('min', todayString);
+
+    // $(".listEvents").on("click", ".event", function () {
+    //   $(this).children("div").children(".desc").slideToggle();
+    // });
+
+    $(".wrapper").on("click", ".event", function () {
+      $(this).children("div").children(".desc").slideToggle();
+    });
+
+    $(".listEvents").on({
+      mouseenter: function () {
+        $(this).children("div").children(".eventTitle").children(".time").fadeIn("fast");
+      },
+      mouseleave: function () {
+        $(this).children("div").children(".eventTitle").children(".time").hide();
+      }
+    }, ".event");
+
+    $($(document).on("loadedEvents", function () {
+
+      // Generate class options from config
+      // Expect form of CLASSES=['class', 'class']: Array[string]
+      CLASSES.forEach(c => $("#inputClass").append(`<option value="${c}">${c}</option>`))
+
+      $(".complete").click(function (e) {
+        //console.log($(this).parent());
+        var eventId = $(this).parent().data("eventid");
+        //console.log(eventId);
+        gapi.client.calendar.events.get({ 'calendarId': CAL_ID, 'eventId': eventId })
+          .execute(function (resp) {
+            //console.log("got event", resp);
+            gapi.client.calendar.events.update(
+              {
+                "calendarId": CAL_ID,
+                "eventId": eventId,
+                "resource": {
+                  "summary": resp.summary,
+                  "description": (resp.description ? resp.description + " " : "") + "complete",
+                  "start": resp.start,
+                  "end": resp.end
+                }
+              })
+              .execute(function (resp2) {
+                //console.log("update resp:", resp2)
+                loadCalendarApi();
+              });
+          });
+      });
+      $(".uncomplete").click(function (e) {
+        //console.log($(this).parent());
+        var eventId = $(this).parent().data("eventid");
+        //console.log(eventId);
+        gapi.client.calendar.events.get({ 'calendarId': CAL_ID, 'eventId': eventId })
+          .execute(function (resp) {
+            //console.log("got event", resp);
+            gapi.client.calendar.events.update(
+              {
+                "calendarId": CAL_ID,
+                "eventId": eventId,
+                "resource": {
+                  "summary": resp.summary,
+                  "description": (resp.description ? resp.description.replace(/\s*complete\s*/, "") : ""),
+                  "start": resp.start,
+                  "end": resp.end
+                }
+              })
+              .execute(function (resp2) {
+                //console.log("update resp:", resp2)
+                loadCalendarApi();
+              });
+          });
+      });
+    }));
+
+    // Refer to the JavaScript quickstart on how to setup the environment:
+    // https://developers.google.com/google-apps/calendar/quickstart/js
+    // Change the scope to 'https://www.googleapis.com/auth/calendar' and delete any
+    // stored credentials.
+    function createEvent() {
+      var inputDate = $('[name="inputDate"]').val();
+      var inputTime = $('[name="inputTime"]').val();
+      var date = makeDate(inputDate, inputTime);
+      var dateEnd = makeDate(inputDate, inputTime);
+      dateEnd.setMinutes(50);
+
+      var prefix = $('[name="inputClass"]').val();
+      var summary = (prefix ? prefix + " - " : "") + $('[name="inputAssignment"]').val();
+
+      var event = {
+        'summary': summary,
+        'description': $('[name="inputDescription"]').val(),
+        'start': {
+          'dateTime': date.toJSON(),
+          'timeZone': "America/New_York"
+        },
+        'end': {
+          'dateTime': dateEnd.toJSON(),
+          'timeZone': "America/New_York"
+        }
+      };
+
+      if ($('[name="inputUrgent"]').prop("checked")) {
+        event.description += " urgent";
+      }
+
+      var request = gapi.client.calendar.events.insert({
+        'calendarId': CAL_ID,
+        'resource': event
+      });
+
+      request.execute(function (event) {
+        $('[name="inputDescription"]').val("");
+        $('[name="inputDate"]').val("");
+        $('[name="inputUrgent"]').prop("checked", false);
+        if (!$('[name="preserve-assignment"]').prop("checked")) {
+          //if not preserve assignment
+          $('[name="inputAssignment"]').val("");
+        }
+        if (!$('[name="preserve-time"]').prop("checked")) {
+          //if not preserve time
+          $('[name="inputTime"]').val("");
+        }
+        if (!$('[name="preserve-class"]').prop("checked")) {
+          //If not preserve class
+          $('[name="inputClass"]').val(this.defaultSelected);
+          $('[name="inputClass"]').focus();
+        }
+        else {
+          $('[name="inputDescription"]').focus();
+        }
+        $(".newEvent").slideToggle();
+        loadCalendarApi();
+      });
+    }
+
+    /**
+     * Take in a date and time as strings and parses the strings to return them as a Date object.
+     *
+     * @param {string} date The date in the form yyyy-mm-dd where mm is 1 to 12
+     * @param {string} time The time in the form hh:mm
+     * @returns {Date}
+     */
+    function makeDate(date, time) {
+      var year, month, day, hour, min, sec;
+      var dateParts = date.split("-");
+      var timeParts = time.split(":");
+
+      if (timeParts[0].length < 2) {
+        timeParts[0] = "0" + timeParts[0];
+      }
+      if (timeParts[1].length < 2) {
+        timeParts[1] = timeParts[1] + "0";
+      }
+
+      year = dateParts[0];
+      month = parseInt(dateParts[1]) - 1;
+      day = dateParts[2];
+      hour = timeParts[0];
+      min = timeParts[1];
+      sec = "00";
+
+      return new Date(year, month, day, hour, min, sec, 0);
+
+    }
+  </script>
+
+</body>
+
+</html>

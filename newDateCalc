@@ -1,0 +1,28 @@
+
+days = {
+  date: [],
+  date2: []
+}
+
+currDate = new Date()
+d = 0
+while d < Object.keys(days).length && d < max days {
+  if (days[currDate.toJSON()]) {
+    // add date with events
+    d++;
+  else
+    // add empty day for timeline
+  currDate.addDay(1)
+}
+// add empty day to end timeline with empty
+// will also act in place of no events
+
+// this goes through all the dates up through the last event we have
+// an event for. It will also ensure proper order as it searches day
+// by day instead of relying on the object's keys being ordered
+// correctly in the first place in the `for x in y`
+
+// make sure to have max days to prevent something like 200 empty days
+// in the timeline from something due next year
+// maybe have extra loop to put after a ... in timeline for 
+// extra "future" events past max days
